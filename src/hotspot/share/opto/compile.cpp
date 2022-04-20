@@ -2176,8 +2176,11 @@ void Compile::Optimize() {
       if (failing())  return;
     }
     bool progress;
+#ifndef PRODUCT
+    int total_scalar_replaced = 0;
+#endif
     do {
-      ConnectionGraph::do_analysis(this, &igvn);
+      bool has_non_escaping_objs = ConnectionGraph::do_analysis(this, &igvn);
 
       if (failing())  return;
 
@@ -2189,17 +2192,14 @@ void Compile::Optimize() {
 
       if (failing())  return;
 
-      if (congraph() != NULL && macro_count() > 0) {
-#ifndef PRODUCT
-        int _prev_scalar_replaced = Atomic::load(&PhaseMacroExpand::_objs_scalar_replaced_counter);
-#endif
+      if (has_non_escaping_objs && macro_count() > 0) {
         TracePhase tp("macroEliminate", &timers[_t_macroEliminate]);
         PhaseMacroExpand mexp(igvn);
         mexp.eliminate_macro_nodes();
         igvn.set_delay_transform(false);
 
 #ifndef PRODUCT
-        congraph()->update_escape_state(Atomic::load(&PhaseMacroExpand::_objs_scalar_replaced_counter) - _prev_scalar_replaced);
+      total_scalar_replaced += mexp._local_scalar_replaced;
 #endif
         igvn.optimize();
         print_method(PHASE_ITER_GVN_AFTER_ELIMINATION, 2);
@@ -2212,6 +2212,15 @@ void Compile::Optimize() {
       // Try again if candidates exist and made progress
       // by removing some allocations and/or locks.
     } while (progress);
+
+#ifndef PRODUCT
+    Atomic::add(&ConnectionGraph::_no_escape_counter, total_scalar_replaced);
+    if(congraph() != NULL) {
+      Atomic::add(&ConnectionGraph::_no_escape_counter, congraph()->_local_no_escape);
+      Atomic::add(&ConnectionGraph::_arg_escape_counter, congraph()->_local_arg_escape);
+      Atomic::add(&ConnectionGraph::_global_escape_counter, congraph()->_local_global_escape);
+    }
+#endif
   }
 
   // Loop transforms on the ideal graph.  Range Check Elimination,

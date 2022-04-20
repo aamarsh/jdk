@@ -600,7 +600,7 @@ public:
   static bool has_candidates(Compile *C);
 
   // Perform escape analysis
-  static void do_analysis(Compile *C, PhaseIterGVN *igvn);
+  static bool do_analysis(Compile *C, PhaseIterGVN *igvn);
 
   bool not_global_escape(Node *n);
 
@@ -639,9 +639,9 @@ public:
   static int _no_escape_counter;
   static int _arg_escape_counter;
   static int _global_escape_counter;
-  int _prev_no_escape;
-  int _prev_arg_escape;
-  int _prev_global_escape;
+  int _local_no_escape;
+  int _local_arg_escape;
+  int _local_global_escape;
   static long _time_elapsed;
   void dump(GrowableArray<PointsToNode*>& ptnodes_worklist);
   static void print_statistics();

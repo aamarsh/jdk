@@ -54,9 +54,9 @@ ConnectionGraph::ConnectionGraph(Compile * C, PhaseIterGVN *igvn, int invocation
   _build_time(0.),
   _node_map(C->comp_arena())
 #ifndef PRODUCT
-  , _prev_no_escape(0),
-  _prev_arg_escape(0),
-  _prev_global_escape(0)
+  , _local_no_escape(0),
+  _local_arg_escape(0),
+  _local_global_escape(0)
 #endif
 {
   // Add unknown java object.
@@ -97,7 +97,7 @@ bool ConnectionGraph::has_candidates(Compile *C) {
   return false;
 }
 
-void ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
+bool ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
   Compile::TracePhase tp("escapeAnalysis", &Phase::timers[Phase::_t_escapeAnalysis]);
   ResourceMark rm;
 
@@ -112,22 +112,10 @@ void ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
   int invocation = 0;
   if (C->congraph() != NULL) {
     invocation = C->congraph()->_invocation + 1;
-#ifndef PRODUCT
-    // Reset counters when do_analysis is called again so objects are not double counted
-    Atomic::store(&_no_escape_counter, C->congraph()->_prev_no_escape);
-    Atomic::store(&_arg_escape_counter, C->congraph()->_prev_arg_escape);
-    Atomic::store(&_global_escape_counter, C->congraph()->_prev_global_escape);
-#endif
   }
   ConnectionGraph* congraph = new(C->comp_arena()) ConnectionGraph(C, igvn, invocation);
-#ifndef PRODUCT
-  // Save past value of counters in case do_analysis is called again
-  congraph->_prev_no_escape = Atomic::load(&_no_escape_counter);
-  congraph->_prev_arg_escape = Atomic::load(&_arg_escape_counter);
-  congraph->_prev_global_escape = Atomic::load(&_global_escape_counter);
-#endif
-  // Perform escape analysis
-  if (congraph->compute_escape()) {
+  bool has_non_escaping_objs = congraph->compute_escape();
+  if (has_non_escaping_objs) {
     // There are non escaping objects.
     C->set_congraph(congraph);
   }
@@ -144,6 +132,7 @@ void ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
   // casting jlong to long since Atomic needs Integral type
   Atomic::add(&ConnectionGraph::_time_elapsed, (long)et.milliseconds());
 #endif
+  return has_non_escaping_objs;
 }
 
 bool ConnectionGraph::compute_escape() {
@@ -3792,15 +3781,8 @@ void ConnectionGraph::dump(GrowableArray<PointsToNode*>& ptnodes_worklist) {
 }
 
 void ConnectionGraph::print_statistics() {
-  tty->print_cr("No escape: %d", Atomic::load(&_no_escape_counter));
-  tty->print_cr("Arg escape: %d", Atomic::load(&_arg_escape_counter));
-  tty->print_cr("Global escape: %d", Atomic::load(&_global_escape_counter));
-  tty->print_cr("Total java objects in escape analysis: %d", Atomic::load(&_global_escape_counter) + Atomic::load(&_arg_escape_counter) + Atomic::load(&_no_escape_counter));
-  tty->print_cr("Total time in escape analysis: %7.2f seconds", Atomic::load(&_time_elapsed) * 0.001);
-}
-
-void ConnectionGraph::update_escape_state(int eliminated) {
-  _prev_no_escape += eliminated;
+  tty->print("No escape = %d, Arg escape = %d, Global escape = %d", Atomic::load(&_no_escape_counter), Atomic::load(&_arg_escape_counter), Atomic::load(&_global_escape_counter));
+  tty->print_cr(" (EA executed in %7.2f seconds)", Atomic::load(&_time_elapsed) * 0.001);
 }
 
 void ConnectionGraph::escape_state_statistics(GrowableArray<JavaObjectNode*>& java_objects_worklist) {
@@ -3808,13 +3790,13 @@ void ConnectionGraph::escape_state_statistics(GrowableArray<JavaObjectNode*>& ja
     JavaObjectNode* ptn = java_objects_worklist.at(next);
     if (ptn->ideal_node()->is_Allocate()) {
       if(ptn->escape_state() == PointsToNode::NoEscape) {
-        Atomic::add(&ConnectionGraph::_no_escape_counter, 1);
+        _local_no_escape++;
       }
       else if (ptn->escape_state() == PointsToNode::ArgEscape) {
-        Atomic::add(&ConnectionGraph::_arg_escape_counter, 1);
+        _local_arg_escape++;
       }
       else if (ptn->escape_state() == PointsToNode::GlobalEscape) {
-        Atomic::add(&ConnectionGraph::_global_escape_counter, 1);
+        _local_global_escape++;
       }
       else {
         assert(false, "Unexpected Escape State");

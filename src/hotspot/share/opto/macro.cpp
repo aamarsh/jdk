@@ -2367,6 +2367,7 @@ void PhaseMacroExpand::eliminate_macro_nodes() {
 #ifndef PRODUCT
         if(success){
           Atomic::add(&PhaseMacroExpand::_objs_scalar_replaced_counter, 1);
+          _local_scalar_replaced++;
         }
 #endif
         break;
@@ -2598,10 +2599,10 @@ int PhaseMacroExpand::_GC_barriers_removed_counter = 0;
 int PhaseMacroExpand::_memory_barriers_removed_counter = 0;
 
 void PhaseMacroExpand::print_statistics() {
-  tty->print_cr("Objects scalar replaced: %d", Atomic::load(&_objs_scalar_replaced_counter));
-  tty->print_cr("Monitor objects removed: %d", Atomic::load(&_monitor_objects_removed_counter));
-  tty->print_cr("GC barriers removed: %d", Atomic::load(&_GC_barriers_removed_counter));
-  tty->print_cr("Memory barriers removed: %d", Atomic::load(&_memory_barriers_removed_counter));
+  tty->print("Objects scalar replaced = %d, ", Atomic::load(&_objs_scalar_replaced_counter));
+  tty->print("Monitor objects removed = %d, ", Atomic::load(&_monitor_objects_removed_counter));
+  tty->print("GC barriers removed = %d, ", Atomic::load(&_GC_barriers_removed_counter));
+  tty->print_cr("Memory barriers removed = %d", Atomic::load(&_memory_barriers_removed_counter));
 }
 
 int PhaseMacroExpand::count_MemBar() {
