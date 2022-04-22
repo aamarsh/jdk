@@ -53,11 +53,6 @@ ConnectionGraph::ConnectionGraph(Compile * C, PhaseIterGVN *igvn, int invocation
   _build_iterations(0),
   _build_time(0.),
   _node_map(C->comp_arena())
-#ifndef PRODUCT
-  , _local_no_escape(0),
-  _local_arg_escape(0),
-  _local_global_escape(0)
-#endif
 {
   // Add unknown java object.
   add_java_object(C->top(), PointsToNode::GlobalEscape);
@@ -97,7 +92,7 @@ bool ConnectionGraph::has_candidates(Compile *C) {
   return false;
 }
 
-bool ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
+void ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
   Compile::TracePhase tp("escapeAnalysis", &Phase::timers[Phase::_t_escapeAnalysis]);
   ResourceMark rm;
 
@@ -114,8 +109,7 @@ bool ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
     invocation = C->congraph()->_invocation + 1;
   }
   ConnectionGraph* congraph = new(C->comp_arena()) ConnectionGraph(C, igvn, invocation);
-  bool has_non_escaping_objs = congraph->compute_escape();
-  if (has_non_escaping_objs) {
+  if (congraph->compute_escape()) {
     // There are non escaping objects.
     C->set_congraph(congraph);
   }
@@ -132,7 +126,6 @@ bool ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
   // casting jlong to long since Atomic needs Integral type
   Atomic::add(&ConnectionGraph::_time_elapsed, (long)et.milliseconds());
 #endif
-  return has_non_escaping_objs;
 }
 
 bool ConnectionGraph::compute_escape() {
@@ -3788,15 +3781,18 @@ void ConnectionGraph::print_statistics() {
 void ConnectionGraph::escape_state_statistics(GrowableArray<JavaObjectNode*>& java_objects_worklist) {
   for (int next = 0; next < java_objects_worklist.length(); ++next) {
     JavaObjectNode* ptn = java_objects_worklist.at(next);
+     _compile->_local_no_escape_ctr = 0;
+     _compile->_local_arg_escape_ctr = 0;
+     _compile->_local_global_escape_ctr =0;
     if (ptn->ideal_node()->is_Allocate()) {
       if(ptn->escape_state() == PointsToNode::NoEscape) {
-        _local_no_escape++;
+        _compile->_local_no_escape_ctr++;
       }
       else if (ptn->escape_state() == PointsToNode::ArgEscape) {
-        _local_arg_escape++;
+        _compile->_local_arg_escape_ctr++;
       }
       else if (ptn->escape_state() == PointsToNode::GlobalEscape) {
-        _local_global_escape++;
+        _compile->_local_global_escape_ctr++;
       }
       else {
         assert(false, "Unexpected Escape State");

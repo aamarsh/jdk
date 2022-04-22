@@ -2178,9 +2178,12 @@ void Compile::Optimize() {
     bool progress;
 #ifndef PRODUCT
     int total_scalar_replaced = 0;
+    _local_no_escape_ctr = 0;
+    _local_arg_escape_ctr = 0;
+    _local_global_escape_ctr = 0;
 #endif
     do {
-      bool has_non_escaping_objs = ConnectionGraph::do_analysis(this, &igvn);
+      ConnectionGraph::do_analysis(this, &igvn);
 
       if (failing())  return;
 
@@ -2192,7 +2195,7 @@ void Compile::Optimize() {
 
       if (failing())  return;
 
-      if (has_non_escaping_objs && macro_count() > 0) {
+      if (congraph() != NULL && macro_count() > 0) {
         TracePhase tp("macroEliminate", &timers[_t_macroEliminate]);
         PhaseMacroExpand mexp(igvn);
         mexp.eliminate_macro_nodes();
@@ -2216,9 +2219,9 @@ void Compile::Optimize() {
 #ifndef PRODUCT
     Atomic::add(&ConnectionGraph::_no_escape_counter, total_scalar_replaced);
     if(congraph() != NULL) {
-      Atomic::add(&ConnectionGraph::_no_escape_counter, congraph()->_local_no_escape);
-      Atomic::add(&ConnectionGraph::_arg_escape_counter, congraph()->_local_arg_escape);
-      Atomic::add(&ConnectionGraph::_global_escape_counter, congraph()->_local_global_escape);
+      Atomic::add(&ConnectionGraph::_no_escape_counter, _local_no_escape_ctr);
+      Atomic::add(&ConnectionGraph::_arg_escape_counter, _local_arg_escape_ctr);
+      Atomic::add(&ConnectionGraph::_global_escape_counter, _local_global_escape_ctr);
     }
 #endif
   }
